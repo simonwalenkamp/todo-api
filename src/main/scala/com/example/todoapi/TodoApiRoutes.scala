@@ -2,8 +2,8 @@ package com.example.todoapi
 
 import cats.effect.Concurrent
 import cats.syntax.all.*
-import com.example.todoapi.request.UpdateTodoRequest
-import com.example.todoapi.response.{CreateTodoListResponse, GetAllTodoListsResponse, GetTodoListResponse, TodoResponse}
+import com.example.todoapi.request.{AddTodoRequest, UpdateTodoRequest}
+import com.example.todoapi.response.{CreateTodoListResponse, CreateTodoResponse, GetAllTodoListsResponse, GetTodoListResponse, TodoResponse}
 import com.example.todoapi.service.TodoService
 import org.http4s.HttpRoutes
 import org.http4s.dsl.Http4sDsl
@@ -15,33 +15,42 @@ object TodoApiRoutes:
     import dsl.*
     HttpRoutes.of[F] {
       case GET -> Root / UUIDVar(userId) / "todos" =>
-        for {
-          todoLists <- todoService.getAllTodoLists(userId)
-          resp <- Ok(GetAllTodoListsResponse(todoLists))
-        } yield resp
+        todoService.getAllTodoLists(userId).flatMap {
+          case Right(todoLists) => Ok(GetAllTodoListsResponse(todoLists))
+          case Left(error) => BadRequest(error.getMessage)
+        }
 
       case POST -> Root / UUIDVar(userId) / "todos" =>
-        for {
-          id <- todoService.createTodoList(userId)
-          resp <- Ok(CreateTodoListResponse(id))
-        } yield resp
+        todoService.createTodoList(userId).flatMap( {
+          case Right(id) => Ok(CreateTodoListResponse(id))
+          case Left(error) => BadRequest(error.getMessage)
+        })
 
       case GET -> Root / UUIDVar(userId) / "todos" / UUIDVar(id) =>
-        for {
-          todoList <- todoService.getTodoList(userId, id)
-          resp <- Ok(GetTodoListResponse.fromTodoList(todoList))
-        } yield resp
+        todoService.getTodoList(userId, id).flatMap( {
+          case Right(todoList) => Ok(GetTodoListResponse.fromTodoList(todoList))
+          case Left(error) => BadRequest(error.getMessage)
+        })
 
-      case req @ PUT -> Root / UUIDVar(userId) / "todos" / UUIDVar(todoListId) / UUIDVar(id) =>
-        for {
-          updateReq <- req.as[UpdateTodoRequest]
-          updated <- todoService.updateTodo(userId, todoListId, id, updateReq.name, updateReq.status)
-          resp <- Ok(TodoResponse.fromTodo(updated))
-        } yield resp
+      case req @ POST -> Root / UUIDVar(userId) / "todos" / UUIDVar(listId) =>
+        req.as[AddTodoRequest].flatMap { addRequest =>
+          todoService.addTodo(userId, listId, addRequest.name).flatMap {
+            case Right(id) => Ok(CreateTodoResponse(id))
+            case Left(error) => BadRequest(error.getMessage)
+          }
+        }
+
+      case req @ PUT -> Root / UUIDVar(userId) / "todos" / UUIDVar(listId) / UUIDVar(todoId) =>
+        req.as[UpdateTodoRequest].flatMap { updateRequest =>
+          todoService.updateTodo(userId, listId, todoId, updateRequest.name, updateRequest.status).flatMap {
+            case Right(todo) => Ok(TodoResponse.fromTodo(todo))
+            case Left(error) => BadRequest(error.getMessage)
+          }
+        }
 
       case DELETE -> Root / UUIDVar(userId) / "todos" / UUIDVar(todoListId) / UUIDVar(id) =>
-        for {
-          _ <- todoService.deleteTodo(userId, todoListId, id)
-          resp <- NoContent()
-        } yield resp
+        todoService.deleteTodo(userId, todoListId, id).flatMap( {
+          case Right(_) => NoContent()
+          case Left(error) => BadRequest(error.getMessage)
+        })
     }

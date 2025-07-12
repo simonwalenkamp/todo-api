@@ -1,49 +1,84 @@
 package com.example.todoapi.service
 
-import cats.Applicative
-import com.example.todoapi.model.{Status, Todo, TodoList}
+import cats.Monad
 import cats.implicits.catsSyntaxApplicativeId
+import cats.syntax.all.*
+import com.example.todoapi.model.{Status, Todo, TodoList}
+import com.example.todoapi.repository.TodoRepository
 
 import java.util.UUID
 
 trait TodoService[F[_]]:
-    def getAllTodoLists(userId: UUID): F[Array[UUID]]
-    def createTodoList(userId: UUID): F[UUID]
-    def getTodoList(userId: UUID, id: UUID): F[TodoList]
-    def updateTodo(userId: UUID, todoListId: UUID, id: UUID, name: String, status: Status): F[Todo]
-    def deleteTodo(userId: UUID, todoListId: UUID, id: UUID): F[Unit]
+    def getAllTodoLists(userId: UUID): F[Either[Error, Array[UUID]]]
+    def createTodoList(userId: UUID): F[Either[Error, UUID]]
+    def getTodoList(userId: UUID, id: UUID): F[Either[Error, TodoList]]
+    def updateTodo(userId: UUID, todoListId: UUID, id: UUID, name: String, status: Status): F[Either[Error, Todo]]
+    def deleteTodo(userId: UUID, todoListId: UUID, id: UUID): F[Either[Error, Unit]]
+    def addTodo(userId: UUID, todoListId: UUID, name: String): F[Either[Error, UUID]]
 
 object TodoService:
-    def impl[F[_]: Applicative]: TodoService[F] = new TodoService[F]:
-        // Some dummy UUIDs for testing
-        private val dummyUserId = UUID.fromString("550e8400-e29b-41d4-a716-446655440000")
-        private val dummyListId = UUID.fromString("550e8400-e29b-41d4-a716-446655440001")
-        private val dummyTodoId = UUID.fromString("550e8400-e29b-41d4-a716-446655440002")
+    def impl[F[_]: Monad](repository: TodoRepository[F]): TodoService[F] = new TodoService[F]:
+        private def withUser[A](userId: UUID)(f: UUID => F[Either[Error, A]]): F[Either[Error, A]] = {
+            repository.getUser(userId).flatMap {
+                case Some(userFound) => f(userFound)
+                case None => Left(Error("user not found")).pure[F]
+            }
+        }
 
-        // Dummy todo and todolist
-        private val dummyTodo = Todo(
-            id = dummyTodoId,
-            name = "Example Todo",
-            status = Status.Todo
-        )
+        private def withUserForTodoList[A](userId: UUID, todoListId: UUID)(f: ((UUID, TodoList))
+          => F[Either[Error, A]]): F[Either[Error, A]] = {
+            withUser(userId) { user =>
+                repository.getTodoList(todoListId).flatMap {
+                    case Some(list) if list.userId == user => f(user, list)
+                    case Some(_) => Left(Error("user does not have access to todo list")).pure[F]
+                    case None => Left(Error("todo list not found")).pure[F]
+                }
+            }
+        }
 
-        private val dummyTodoList = TodoList(
-            id = dummyListId,
-            userId = dummyUserId,
-            todos = List(dummyTodo)
-        )
+        override def getAllTodoLists(userId: UUID): F[Either[Error, Array[UUID]]] = {
+            withUser(userId) { user =>
+                repository.getAllTodoLists(user).map(Right(_))
+            }
+        }
 
-        def getAllTodoLists(userId: UUID): F[Array[UUID]] =
-            Array(dummyListId).pure[F]
+        override def createTodoList(userId: UUID): F[Either[Error, UUID]] = {
+            withUser(userId) { user =>
+                repository.createTodoList(user).map(Right(_))
+            }
+        }
 
-        def createTodoList(userId: UUID): F[UUID] =
-            dummyListId.pure[F]
+        override def getTodoList(userId: UUID, id: UUID): F[Either[Error, TodoList]] = {
+            withUserForTodoList(userId, id) { (_, list) =>
+                list.pure[F].map(Right(_))
+            }
+        }
 
-        def getTodoList(userId: UUID, id: UUID): F[TodoList] =
-            dummyTodoList.pure[F]
+        override def updateTodo(userId: UUID, todoListId: UUID, id: UUID, name: String, status: Status): F[Either[Error, Todo]] = {
+            withUserForTodoList(userId, todoListId) { (_, list) =>
+                list.todos.find(_.id == id) match {
+                    case Some(_) =>
+                        repository.updateTodo(todoListId, id, name, status).map {
+                            case Some(updated) => Right(updated)
+                            case None          => Left(Error("could not update todo"))
+                        }
+                    case None =>
+                        Left(Error("todo not found")).pure[F]
+                }
+            }
+        }
 
-        def updateTodo(userId: UUID, todoListId: UUID, id: UUID, name: String, status: Status): F[Todo] =
-            dummyTodo.copy(name = name, status = status).pure[F]
+        override def deleteTodo(userId: UUID, todoListId: UUID, id: UUID): F[Either[Error, Unit]] = {
+            withUserForTodoList(userId, todoListId) { (_, list) =>
+              repository.deleteTodo(list.id, id).map(Right(_))
+            }
+        }
 
-        def deleteTodo(userId: UUID, todoListId: UUID, id: UUID): F[Unit] =
-            ().pure[F]
+        override def addTodo(userId: UUID, todoListId: UUID, name: String): F[Either[Error, UUID]] = {
+            withUserForTodoList(userId, todoListId) { (_, list) =>
+              repository.addTodo(list.id, name).map {
+                  case Some(newTodoId) => Right(newTodoId)
+                  case None => Left(Error("could not add todo"))
+              }
+            }
+        }

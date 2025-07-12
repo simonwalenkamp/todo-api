@@ -2,6 +2,7 @@ package com.example.todoapi
 
 import cats.effect.Async
 import com.comcast.ip4s.*
+import com.example.todoapi.repository.TodoRepository
 import com.example.todoapi.service.TodoService
 import fs2.io.net.Network
 import org.http4s.ember.client.EmberClientBuilder
@@ -14,8 +15,9 @@ object TodoApiServer:
   def run[F[_]: Async: Network]: F[Nothing] = {
     for {
       client <- EmberClientBuilder.default[F].build
-      todoAlg = TodoService.impl[F]
-      
+      repository = new TodoRepository[F]
+      todoAlg = TodoService.impl[F](repository)
+
       httpApp = TodoApiRoutes.TodoRoutes[F](todoAlg).orNotFound
 
       // With Middlewares in place
