@@ -3,4 +3,4 @@ package com.example.todoapi
 import cats.effect.{IO, IOApp}
 
 object Main extends IOApp.Simple:
-  val run = TodoapiServer.run[IO]
+  val run: IO[Nothing] = TodoApiServer.run[IO]

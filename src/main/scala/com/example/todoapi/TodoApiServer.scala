@@ -1,30 +1,22 @@
 package com.example.todoapi
 
 import cats.effect.Async
-import cats.syntax.all.*
 import com.comcast.ip4s.*
+import com.example.todoapi.service.TodoService
 import fs2.io.net.Network
 import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.implicits.*
 import org.http4s.server.middleware.Logger
 
-object TodoapiServer:
+object TodoApiServer:
 
   def run[F[_]: Async: Network]: F[Nothing] = {
     for {
       client <- EmberClientBuilder.default[F].build
-      helloWorldAlg = HelloWorld.impl[F]
-      jokeAlg = Jokes.impl[F](client)
-
-      // Combine Service Routes into an HttpApp.
-      // Can also be done via a Router if you
-      // want to extract segments not checked
-      // in the underlying routes.
-      httpApp = (
-        TodoapiRoutes.helloWorldRoutes[F](helloWorldAlg) <+>
-        TodoapiRoutes.jokeRoutes[F](jokeAlg)
-      ).orNotFound
+      todoAlg = TodoService.impl[F]
+      
+      httpApp = TodoApiRoutes.TodoRoutes[F](todoAlg).orNotFound
 
       // With Middlewares in place
       finalHttpApp = Logger.httpApp(true, true)(httpApp)
