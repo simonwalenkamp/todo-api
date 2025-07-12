@@ -1,0 +1,43 @@
+# sbt build artifacts
+/target/
+/project/target/
+/project/project/
+
+# IntelliJ IDEA
+/.idea/
+/*.iml
+/out/
+
+# VS Code
+/.vscode/
+
+# Mac system files
+.DS_Store
+
+# Logs
+*.log
+
+# Dependency directories
+/lib_managed/
+/src_managed/
+/bin/
+/.ensime_cache/
+/.worksheet/
+
+# Metals
+/.metals/
+/.bloop/
+/.metals.sbt
+
+# coursier cache
+/.cache/
+/coursier
+
+# Scala.js
+/.scala-js/
+
+# Assembly JARs
+*.jar
+
+# Other
+*.class
