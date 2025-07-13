@@ -1,9 +1,10 @@
 package com.example.todoapi.response
 
+import cats.effect.Concurrent
 import com.example.todoapi.model.Todo
-import io.circe.Encoder
-import org.http4s.EntityEncoder
-import org.http4s.circe.jsonEncoderOf
+import io.circe.{Decoder, Encoder}
+import org.http4s.{EntityDecoder, EntityEncoder}
+import org.http4s.circe.{jsonEncoderOf, jsonOf}
 
 import java.util.UUID
 
@@ -15,3 +16,5 @@ object TodoResponse:
 
   given Encoder[TodoResponse] = Encoder.AsObject.derived[TodoResponse]
   given [F[_]]: EntityEncoder[F, TodoResponse] = jsonEncoderOf
+  given Decoder[TodoResponse] = Decoder.derived[TodoResponse]
+  given [F[_] : Concurrent]: EntityDecoder[F, TodoResponse] = jsonOf
